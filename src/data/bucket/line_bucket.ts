@@ -1,3 +1,4 @@
+import type {VectorTileLayer} from '@mapbox/vector-tile';
 import {LineLayoutArray, LineExtLayoutArray} from '../array_types';
 
 import {members as layoutAttributes} from './line_attributes';

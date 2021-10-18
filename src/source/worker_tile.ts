@@ -1,3 +1,4 @@
+import type {VectorTile} from '@mapbox/vector-tile';
 import FeatureIndex from '../data/feature_index';
 
 import {performSymbolLayout} from '../symbol/symbol_layout';

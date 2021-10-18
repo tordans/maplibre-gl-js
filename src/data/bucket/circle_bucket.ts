@@ -1,3 +1,4 @@
+import type {VectorTileLayer} from '@mapbox/vector-tile';
 import {CircleLayoutArray} from '../array_types';
 
 import {members as layoutAttributes} from './circle_attributes';

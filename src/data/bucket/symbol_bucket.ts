@@ -1,3 +1,4 @@
+import type {VectorTileLayer} from '@mapbox/vector-tile';
 import {
     symbolLayoutAttributes,
     collisionVertexAttributes,

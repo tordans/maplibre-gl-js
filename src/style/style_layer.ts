@@ -1,3 +1,4 @@
+import type {VectorTileFeature} from '@mapbox/vector-tile';
 import {filterObject} from '../util/util';
 
 import styleSpec from '../style-spec/reference/latest';

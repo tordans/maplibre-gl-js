@@ -1,3 +1,4 @@
+import type {VectorTileLayer} from '@mapbox/vector-tile';
 import {uniqueId, parseCacheControl} from '../util/util';
 import {deserialize as deserializeBucket} from '../data/bucket';
 import '../data/feature_index';

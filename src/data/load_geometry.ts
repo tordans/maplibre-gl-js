@@ -1,3 +1,4 @@
+import type {VectorTileFeature} from '@mapbox/vector-tile';
 import {warnOnce, clamp} from '../util/util';
 
 import EXTENT from './extent';

@@ -1,3 +1,4 @@
+import type {VectorTileLayer} from '@mapbox/vector-tile';
 import {packUint8ToFloat} from '../shaders/encode_attribute';
 import Color from '../style-spec/util/color';
 import {supportsPropertyExpression} from '../style-spec/util/properties';

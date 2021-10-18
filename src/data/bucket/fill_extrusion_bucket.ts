@@ -1,3 +1,4 @@
+import type {VectorTileLayer} from '@mapbox/vector-tile';
 import {FillExtrusionLayoutArray} from '../array_types';
 
 import {members as layoutAttributes} from './fill_extrusion_attributes';

@@ -1,3 +1,4 @@
+import type {VectorTileFeature} from '@mapbox/vector-tile';
 import loadGeometry from './load_geometry';
 import type Point from '../util/point';
 

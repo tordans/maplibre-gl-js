@@ -1,3 +1,4 @@
+import type {VectorTile} from '@mapbox/vector-tile';
 import {getArrayBuffer} from '../util/ajax';
 
 import vt from '@mapbox/vector-tile';

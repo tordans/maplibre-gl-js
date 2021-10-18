@@ -1,3 +1,4 @@
+import type {VectorTileFeature, VectorTile, VectorTileLayer} from '@mapbox/vector-tile';
 import Point from '../util/point';
 
 import mvt from '@mapbox/vector-tile';

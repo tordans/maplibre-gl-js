@@ -1,3 +1,4 @@
+import type {VectorTileFeature} from '@mapbox/vector-tile';
 import StyleLayer from '../style_layer';
 
 import FillExtrusionBucket from '../../data/bucket/fill_extrusion_bucket';
