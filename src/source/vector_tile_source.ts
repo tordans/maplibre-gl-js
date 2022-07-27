@@ -153,7 +153,7 @@ class VectorTileSource extends Evented implements Source {
     /**
      * Sets the source `url` property and re-renders the map.
      *
-     * @param {string} url A URL to a TileJSON resource. Supported protocols are `http:` and `https:`.
+     * @param {string} url A URL to a TileJSON resource. Supported protocols are `http:` and `https:`. The `mapbox://<Tileset ID>` is not supported anymore since [v 2.0.0](https://github.com/maplibre/maplibre-gl-js/blob/main/CHANGELOG.md#200)
      * @returns {VectorTileSource} this
      */
     setUrl(url: string) {
