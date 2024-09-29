@@ -2346,6 +2346,7 @@ export class Map extends Camera {
      * resulting in the new layer appearing visually beneath the existing layer.
      * If this argument is not specified, the layer will be appended to the end of the layers array
      * and appear visually above all other layers.
+     * The referenced layer has to be visible (layout visibility) when being referenced.
      *
      * @example
      * Add a circle layer with a vector source
