@@ -518,3 +518,87 @@ describe('StyleLayer.globalState', () => {
         expect(layer.isHidden()).toBe(false);
     });
 });
+
+describe('StyleLayer.isStateDependent', () => {
+    test('returns false when no state-dependent properties', () => {
+        const layer = createStyleLayer({
+            'id': 'circle',
+            'type': 'circle',
+            'source': 'source',
+            'paint': {
+                'circle-color': 'red',
+                'circle-radius': 5
+            },
+            'layout': {
+                'circle-sort-key': 0
+            }
+        }, {});
+
+        expect(layer.isStateDependent()).toBe(false);
+    });
+
+    test('returns true when paint property uses feature-state', () => {
+        const layer = createStyleLayer({
+            'id': 'circle',
+            'type': 'circle',
+            'source': 'source',
+            'paint': {
+                'circle-color': ['case', ['boolean', ['feature-state', 'hover'], false], 'red', 'blue']
+            }
+        }, {});
+
+        expect(layer.isStateDependent()).toBe(true);
+    });
+
+    test('returns true when circle-sort-key uses feature-state', () => {
+        const layer = createStyleLayer({
+            'id': 'circle',
+            'type': 'circle',
+            'source': 'source',
+            'layout': {
+                'circle-sort-key': ['case', ['boolean', ['feature-state', 'hover'], false], 1, 0]
+            }
+        }, {});
+
+        expect(layer.isStateDependent()).toBe(true);
+    });
+
+    test('returns true when fill-sort-key uses feature-state', () => {
+        const layer = createStyleLayer({
+            'id': 'fill',
+            'type': 'fill',
+            'source': 'source',
+            'layout': {
+                'fill-sort-key': ['case', ['boolean', ['feature-state', 'selected'], false], 2, 0]
+            }
+        }, {});
+
+        expect(layer.isStateDependent()).toBe(true);
+    });
+
+    test('returns true when line-sort-key uses feature-state', () => {
+        const layer = createStyleLayer({
+            'id': 'line',
+            'type': 'line',
+            'source': 'source',
+            'layout': {
+                'line-sort-key': ['case', ['boolean', ['feature-state', 'highlight'], false], 3, 0]
+            }
+        }, {});
+
+        expect(layer.isStateDependent()).toBe(true);
+    });
+
+    test('returns false when sort-key uses feature property (not feature-state)', () => {
+        const layer = createStyleLayer({
+            'id': 'circle',
+            'type': 'circle',
+            'source': 'source',
+            'layout': {
+                'circle-sort-key': ['get', 'priority']
+            }
+        }, {});
+
+        expect(layer.isStateDependent()).toBe(false);
+    });
+});

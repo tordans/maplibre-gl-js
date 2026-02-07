@@ -11,6 +11,8 @@ import type {StructArray} from '../util/struct_array';
  */
 export type Segment = {
     sortKey?: number;
+    featureId?: number | string;
+    sourceLayerIndex?: number;
     vertexOffset: number;
     primitiveOffset: number;
     vertexLength: number;
@@ -39,7 +41,9 @@ export class SegmentVector {
         numVertices: number,
         layoutVertexArray: StructArray,
         indexArray: StructArray,
-        sortKey?: number
+        sortKey?: number,
+        featureId?: number | string,
+        sourceLayerIndex?: number
     ): Segment {
         const lastSegment: Segment = this.segments[this.segments.length - 1];
 
@@ -47,8 +51,8 @@ export class SegmentVector {
             warnOnce(`Max vertices per segment is ${SegmentVector.MAX_VERTEX_ARRAY_LENGTH}: bucket requested ${numVertices}. Consider using the \`fillLargeMeshArrays\` function if you require meshes with more than ${SegmentVector.MAX_VERTEX_ARRAY_LENGTH} vertices.`);
         }
 
-        if (this._forceNewSegmentOnNextPrepare || !lastSegment || lastSegment.vertexLength + numVertices > SegmentVector.MAX_VERTEX_ARRAY_LENGTH || lastSegment.sortKey !== sortKey) {
-            return this.createNewSegment(layoutVertexArray, indexArray, sortKey);
+        if (this._forceNewSegmentOnNextPrepare || !lastSegment || lastSegment.vertexLength + numVertices > SegmentVector.MAX_VERTEX_ARRAY_LENGTH || lastSegment.sortKey !== sortKey || lastSegment.featureId !== featureId || lastSegment.sourceLayerIndex !== sourceLayerIndex) {
+            return this.createNewSegment(layoutVertexArray, indexArray, sortKey, featureId, sourceLayerIndex);
         } else {
             return lastSegment;
         }
@@ -60,7 +64,9 @@ export class SegmentVector {
     createNewSegment(
         layoutVertexArray: StructArray,
         indexArray: StructArray,
-        sortKey?: number
+        sortKey?: number,
+        featureId?: number | string,
+        sourceLayerIndex?: number
     ): Segment {
         const segment: Segment = {
             vertexOffset: layoutVertexArray.length,
@@ -72,6 +78,12 @@ export class SegmentVector {
 
         if (sortKey !== undefined) {
             segment.sortKey = sortKey;
+        }
+        if (featureId !== undefined) {
+            segment.featureId = featureId;
+        }
+        if (sourceLayerIndex !== undefined) {
+            segment.sourceLayerIndex = sourceLayerIndex;
         }
 
         // If this was set, we have no need to create a new segment on next prepareSegment call,
@@ -87,9 +99,11 @@ export class SegmentVector {
     getOrCreateLatestSegment(
         layoutVertexArray: StructArray,
         indexArray: StructArray,
-        sortKey?: number
+        sortKey?: number,
+        featureId?: number | string,
+        sourceLayerIndex?: number
     ): Segment {
-        return this.prepareSegment(0, layoutVertexArray, indexArray, sortKey);
+        return this.prepareSegment(0, layoutVertexArray, indexArray, sortKey, featureId, sourceLayerIndex);
     }
 
     /**

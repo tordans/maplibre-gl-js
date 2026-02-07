@@ -466,12 +466,12 @@ export class Tile {
 
     setFeatureState(states: LayerFeatureStates, painter: any) {
         if (!this.latestFeatureIndex ||
-            !this.latestFeatureIndex.rawTileData ||
-            Object.keys(states).length === 0) {
+            !this.latestFeatureIndex.rawTileData) {
             return;
         }
 
         const vtLayers = this.latestFeatureIndex.loadVTLayers();
+        const hasStates = Object.keys(states).length > 0;
 
         for (const id in this.buckets) {
             if (!painter.style.hasLayer(id)) continue;
@@ -480,10 +480,16 @@ export class Tile {
             // Buckets are grouped by common source-layer
             const sourceLayerId = bucket.layers[0]['sourceLayer'] || GEOJSON_TILE_LAYER_NAME;
             const sourceLayer = vtLayers[sourceLayerId];
-            const sourceLayerStates = states[sourceLayerId];
-            if (!sourceLayer || !sourceLayerStates || Object.keys(sourceLayerStates).length === 0) continue;
+            const sourceLayerStates = states[sourceLayerId] || {};
 
-            bucket.update(sourceLayerStates, sourceLayer, this.imageAtlas && this.imageAtlas.patternPositions || {}, this.dashPositions || {});
+            // Update bucket if there are states, or if bucket has state-dependent sort-key (needs initial evaluation)
+            const needsUpdate = hasStates && sourceLayerStates && Object.keys(sourceLayerStates).length > 0;
+            const needsSortKeyUpdate = (bucket as any).sortKeyStateDependent && sourceLayer;
+
+            if (needsUpdate || needsSortKeyUpdate) {
+                bucket.update(sourceLayerStates, sourceLayer, this.imageAtlas && this.imageAtlas.patternPositions || {}, this.dashPositions || {});
+            }
+
             const layer = painter && painter.style && painter.style.getLayer(id);
             if (layer) {
                 this.queryPadding = Math.max(this.queryPadding, layer.queryRadius(bucket));

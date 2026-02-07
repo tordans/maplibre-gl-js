@@ -404,6 +404,25 @@ export abstract class StyleLayer extends Evented {
                 return true;
             }
         }
+
+        // Check layout sort-key properties for state-dependent expressions
+        const sortKeyPropertyNames = {
+            'circle': 'circle-sort-key',
+            'fill': 'fill-sort-key',
+            'line': 'line-sort-key'
+        };
+        const sortKeyPropertyName = sortKeyPropertyNames[this.type as keyof typeof sortKeyPropertyNames];
+        if (sortKeyPropertyName && (this as any).layout) {
+            const sortKeyValue = (this as any).layout.get(sortKeyPropertyName);
+            if (sortKeyValue instanceof PossiblyEvaluatedPropertyValue && 
+                supportsPropertyExpression(sortKeyValue.property.specification)) {
+                if ((sortKeyValue.value.kind === 'source' || sortKeyValue.value.kind === 'composite') &&
+                    sortKeyValue.value.isStateDependent) {
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 }

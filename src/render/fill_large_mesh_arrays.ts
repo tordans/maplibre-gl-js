@@ -32,14 +32,17 @@ export function fillLargeMeshArrays(
     triangleIndices: Array<number>,
     segmentsLines?: SegmentVector,
     lineIndexArray?: LineIndexArray,
-    lineList?: Array<Array<number>>) {
+    lineList?: Array<Array<number>>,
+    sortKey?: number,
+    featureId?: number | string,
+    sourceLayerIndex?: number) {
 
     const numVertices = flattened.length / 2;
     const hasLines = segmentsLines && lineIndexArray && lineList;
 
     if (numVertices < SegmentVector.MAX_VERTEX_ARRAY_LENGTH) {
         // The fast path - no segmentation needed
-        const triangleSegment = segmentsTriangles.prepareSegment(numVertices, vertexArray, triangleIndexArray);
+        const triangleSegment = segmentsTriangles.prepareSegment(numVertices, vertexArray, triangleIndexArray, sortKey, featureId, sourceLayerIndex);
         const triangleIndex = triangleSegment.vertexLength;
 
         for (let i = 0; i < triangleIndices.length; i += 3) {
@@ -57,7 +60,7 @@ export function fillLargeMeshArrays(
 
         if (hasLines) {
             // Note that segment creation must happen *before* we add vertices into the vertex buffer
-            lineSegment = segmentsLines.prepareSegment(numVertices, vertexArray, lineIndexArray);
+            lineSegment = segmentsLines.prepareSegment(numVertices, vertexArray, lineIndexArray, sortKey, featureId, sourceLayerIndex);
             lineIndicesStart = lineSegment.vertexLength;
             lineSegment.vertexLength += numVertices;
         }
@@ -92,9 +95,9 @@ export function fillLargeMeshArrays(
         // Normally, (out)lines share the same vertex buffer as triangles, but since we need to somehow split it into several drawcalls,
         // it is easier to just consider (out)lines separately and duplicate their vertices.
 
-        fillSegmentsTriangles(segmentsTriangles, vertexArray, triangleIndexArray, flattened, triangleIndices, addVertex);
+        fillSegmentsTriangles(segmentsTriangles, vertexArray, triangleIndexArray, flattened, triangleIndices, addVertex, sortKey, featureId, sourceLayerIndex);
         if (hasLines) {
-            fillSegmentsLines(segmentsLines, vertexArray, lineIndexArray, flattened, lineList, addVertex);
+            fillSegmentsLines(segmentsLines, vertexArray, lineIndexArray, flattened, lineList, addVertex, sortKey, featureId, sourceLayerIndex);
         }
 
         // Triangles and lines share the same vertex buffer, and they usually also share the same vertices.
@@ -146,7 +149,10 @@ function fillSegmentsTriangles(
     triangleIndexArray: TriangleIndexArray,
     flattened: Array<number>,
     triangleIndices: Array<number>,
-    addVertex: (x: number, y: number) => void
+    addVertex: (x: number, y: number) => void,
+    sortKey?: number,
+    featureId?: number | string,
+    sourceLayerIndex?: number
 ) {
     // Array, or rather a map of [vertex index in the original data] -> index of the latest copy of this vertex in the final vertex buffer.
     const actualVertexIndices: Array<number> = [];
@@ -157,7 +163,7 @@ function fillSegmentsTriangles(
     const totalVerticesCreated = {count: 0};
 
     let currentSegmentCutoff = 0;
-    let segment = segmentsTriangles.getOrCreateLatestSegment(vertexArray, triangleIndexArray);
+    let segment = segmentsTriangles.getOrCreateLatestSegment(vertexArray, triangleIndexArray, sortKey, featureId, sourceLayerIndex);
     let baseVertex = segment.vertexLength;
 
     for (let primitiveEndIndex = 2; primitiveEndIndex < triangleIndices.length; primitiveEndIndex += 3) {
@@ -174,7 +180,7 @@ function fillSegmentsTriangles(
         // Will needed vertex copies fit into this segment?
         if (segment.vertexLength + vertexCopyCount > SegmentVector.MAX_VERTEX_ARRAY_LENGTH) {
             // Break up into a new segment if not.
-            segment = segmentsTriangles.createNewSegment(vertexArray, triangleIndexArray);
+            segment = segmentsTriangles.createNewSegment(vertexArray, triangleIndexArray, sortKey, featureId, sourceLayerIndex);
             currentSegmentCutoff = totalVerticesCreated.count;
             i0needsVertexCopy = true;
             i1needsVertexCopy = true;
@@ -208,7 +214,10 @@ function fillSegmentsLines(
     lineIndexArray: LineIndexArray,
     flattened: Array<number>,
     lineList: Array<Array<number>>,
-    addVertex: (x: number, y: number) => void
+    addVertex: (x: number, y: number) => void,
+    sortKey?: number,
+    featureId?: number | string,
+    sourceLayerIndex?: number
 ) {
     // Array, or rather a map of [vertex index in the original data] -> index of the latest copy of this vertex in the final vertex buffer.
     const actualVertexIndices: Array<number> = [];
@@ -219,7 +228,7 @@ function fillSegmentsLines(
     const totalVerticesCreated = {count: 0};
 
     let currentSegmentCutoff = 0;
-    let segment = segmentsLines.getOrCreateLatestSegment(vertexArray, lineIndexArray);
+    let segment = segmentsLines.getOrCreateLatestSegment(vertexArray, lineIndexArray, sortKey, featureId, sourceLayerIndex);
     let baseVertex = segment.vertexLength;
 
     for (let lineListIndex = 0; lineListIndex < lineList.length; lineListIndex++) {
@@ -236,7 +245,7 @@ function fillSegmentsLines(
             // Will needed vertex copies fit into this segment?
             if (segment.vertexLength + vertexCopyCount > SegmentVector.MAX_VERTEX_ARRAY_LENGTH) {
                 // Break up into a new segment if not.
-                segment = segmentsLines.createNewSegment(vertexArray, lineIndexArray);
+                segment = segmentsLines.createNewSegment(vertexArray, lineIndexArray, sortKey, featureId, sourceLayerIndex);
                 currentSegmentCutoff = totalVerticesCreated.count;
                 i0needsVertexCopy = true;
                 i1needsVertexCopy = true;

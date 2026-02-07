@@ -1,0 +1,87 @@
+{
+  "version": 8,
+  "metadata": {
+    "test": {
+      "width": 64,
+      "height": 64,
+      "operations": [
+        [
+          "setFeatureState",
+          {
+            "source": "geojson",
+            "id": "1"
+          },
+          {
+            "selected": true
+          }
+        ],
+        [
+          "wait"
+        ]
+      ]
+    }
+  },
+  "center": [0.5, 30],
+  "zoom": 1,
+  "sources": {
+    "geojson": {
+      "type": "geojson",
+      "data": {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "id": "0",
+            "properties": {
+              "color": "blue"
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [[[0, 20], [10, 20], [10, 30], [0, 30], [0, 20]]]
+            }
+          },
+          {
+            "type": "Feature",
+            "id": "1",
+            "properties": {
+              "color": "red"
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [[[5, 25], [15, 25], [15, 35], [5, 35], [5, 25]]]
+            }
+          },
+          {
+            "type": "Feature",
+            "id": "2",
+            "properties": {
+              "color": "green"
+            },
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [[[10, 30], [20, 30], [20, 40], [10, 40], [10, 30]]]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "layers": [
+    {
+      "id": "fill",
+      "type": "fill",
+      "source": "geojson",
+      "paint": {
+        "fill-color": ["get", "color"]
+      },
+      "layout": {
+        "fill-sort-key": [
+          "case",
+          ["boolean", ["feature-state", "selected"], false],
+          2,
+          0
+        ]
+      }
+    }
+  ]
+}

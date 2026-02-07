@@ -120,6 +120,7 @@ export class LineBucket implements Bucket {
     programConfigurations: ProgramConfigurationSet<LineStyleLayer>;
     segments: SegmentVector;
     uploaded: boolean;
+    sortKeyStateDependent: boolean;
 
     constructor(options: BucketParameters<LineStyleLayer>) {
         this.zoom = options.zoom;
@@ -149,6 +150,9 @@ export class LineBucket implements Bucket {
         this.hasDependencies = hasPattern('line', this.layers, options) || this.hasLineDasharray(this.layers);
         const lineSortKey = this.layers[0].layout.get('line-sort-key');
         const sortFeaturesByKey = !lineSortKey.isConstant();
+        this.sortKeyStateDependent = sortFeaturesByKey && 
+            (lineSortKey.value.kind === 'source' || lineSortKey.value.kind === 'composite') &&
+            lineSortKey.value.isStateDependent;
         const bucketFeatures: BucketFeature[] = [];
 
         for (const {feature, id, index, sourceLayerIndex} of features) {
@@ -157,9 +161,11 @@ export class LineBucket implements Bucket {
 
             if (!this.layers[0]._featureFilter.filter(new EvaluationParameters(this.zoom), evaluationFeature, canonical)) continue;
 
-            const sortKey = sortFeaturesByKey ?
+            // For state-dependent sort-key, we can't evaluate on worker (no feature state available)
+            // Use placeholder sortKey and store featureId for main-thread re-evaluation
+            const sortKey = sortFeaturesByKey && !this.sortKeyStateDependent ?
                 lineSortKey.evaluate(evaluationFeature, {}, canonical) :
-                undefined;
+                (sortFeaturesByKey ? 0 : undefined);
 
             const bucketFeature: BucketFeature = {
                 id,
@@ -205,11 +211,54 @@ export class LineBucket implements Bucket {
     }
 
     update(states: FeatureStates, vtLayer: VectorTileLayerLike, imagePositions: {[_: string]: ImagePosition}, dashPositions: {[_: string]: DashEntry}) {
-        if (!this.stateDependentLayers.length) return;
-        this.programConfigurations.updatePaintArrays(states, vtLayer, this.stateDependentLayers, {
-            imagePositions,
-            dashPositions
-        });
+        if (!this.stateDependentLayers.length && !this.sortKeyStateDependent) return;
+        
+        if (this.stateDependentLayers.length) {
+            this.programConfigurations.updatePaintArrays(states, vtLayer, this.stateDependentLayers, {
+                imagePositions,
+                dashPositions
+            });
+        }
+
+        // Update sort keys for state-dependent sort-key
+        if (this.sortKeyStateDependent && this.layers.length > 0) {
+            const lineSortKey = this.layers[0].layout.get('line-sort-key');
+            const sourceLayerId = this.layers[0].sourceLayer || '';
+            const sourceLayerStates = states[sourceLayerId] || {};
+
+            // Build a map from featureId to feature for efficient lookup
+            const featureMap = new Map<any, any>();
+            for (let i = 0; i < vtLayer.length; i++) {
+                const feature = vtLayer.feature(i);
+                if (feature && feature.id !== undefined) {
+                    featureMap.set(feature.id, feature);
+                }
+            }
+
+            // Re-evaluate sort keys for segments with featureId
+            for (const segment of this.segments.segments) {
+                if (segment.featureId !== undefined) {
+                    const featureState = sourceLayerStates[segment.featureId] || {};
+                    const feature = featureMap.get(segment.featureId);
+                    if (feature) {
+                        const evaluationFeature = toEvaluationFeature(feature, false);
+                        const sortKey = lineSortKey.evaluate(
+                            evaluationFeature,
+                            featureState,
+                            undefined
+                        );
+                        segment.sortKey = sortKey;
+                    }
+                }
+            }
+
+            // Sort segments by sortKey
+            this.segments.segments.sort((a, b) => {
+                const aKey = a.sortKey ?? 0;
+                const bKey = b.sortKey ?? 0;
+                return aKey - bKey;
+            });
+        }
     }
 
     addFeatures(options: PopulateParameters, canonical: CanonicalTileID, imagePositions: {[_: string]: ImagePosition}, dashPositions?: {[_: string]: DashEntry}) {
@@ -310,7 +359,14 @@ export class LineBucket implements Bucket {
             0;
 
         // we could be more precise, but it would only save a negligible amount of space
-        const segment = this.segments.prepareSegment(len * 10, this.layoutVertexArray, this.indexArray);
+        const segment = this.segments.prepareSegment(
+            len * 10,
+            this.layoutVertexArray,
+            this.indexArray,
+            feature.sortKey,
+            this.sortKeyStateDependent ? feature.id : undefined,
+            this.sortKeyStateDependent ? feature.sourceLayerIndex : undefined
+        );
 
         let currentVertex: Point;
         let prevVertex: Point;

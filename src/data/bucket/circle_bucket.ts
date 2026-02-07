@@ -65,6 +65,7 @@ export class CircleBucket<Layer extends CircleStyleLayer | HeatmapStyleLayer> im
     programConfigurations: ProgramConfigurationSet<Layer>;
     segments: SegmentVector;
     uploaded: boolean;
+    sortKeyStateDependent: boolean;
 
     constructor(options: BucketParameters<Layer>) {
         this.zoom = options.zoom;
@@ -95,9 +96,14 @@ export class CircleBucket<Layer extends CircleStyleLayer | HeatmapStyleLayer> im
             const circleStyle = (styleLayer as CircleStyleLayer);
             circleSortKey = circleStyle.layout.get('circle-sort-key');
             sortFeaturesByKey = !circleSortKey.isConstant();
+            this.sortKeyStateDependent = sortFeaturesByKey && 
+                (circleSortKey.value.kind === 'source' || circleSortKey.value.kind === 'composite') &&
+                circleSortKey.value.isStateDependent;
 
             // Circles that are "printed" onto the map surface should be tessellated to follow the globe's curvature.
             subdivide = subdivide || circleStyle.paint.get('circle-pitch-alignment') === 'map';
+        } else {
+            this.sortKeyStateDependent = false;
         }
 
         const granularity = subdivide ? options.subdivisionGranularity.circle : 1;
@@ -108,9 +114,11 @@ export class CircleBucket<Layer extends CircleStyleLayer | HeatmapStyleLayer> im
 
             if (!this.layers[0]._featureFilter.filter(new EvaluationParameters(this.zoom), evaluationFeature, canonical)) continue;
 
-            const sortKey = sortFeaturesByKey ?
+            // For state-dependent sort-key, we can't evaluate on worker (no feature state available)
+            // Use placeholder sortKey and store featureId for main-thread re-evaluation
+            const sortKey = sortFeaturesByKey && !this.sortKeyStateDependent ?
                 circleSortKey.evaluate(evaluationFeature, {}, canonical) :
-                undefined;
+                (sortFeaturesByKey ? 0 : undefined);
 
             const bucketFeature: BucketFeature = {
                 id,
@@ -141,10 +149,57 @@ export class CircleBucket<Layer extends CircleStyleLayer | HeatmapStyleLayer> im
     }
 
     update(states: FeatureStates, vtLayer: VectorTileLayerLike, imagePositions: {[_: string]: ImagePosition}) {
-        if (!this.stateDependentLayers.length) return;
-        this.programConfigurations.updatePaintArrays(states, vtLayer, this.stateDependentLayers, {
-            imagePositions
-        });
+        if (!this.stateDependentLayers.length && !this.sortKeyStateDependent) return;
+        
+        if (this.stateDependentLayers.length) {
+            this.programConfigurations.updatePaintArrays(states, vtLayer, this.stateDependentLayers, {
+                imagePositions
+            });
+        }
+
+        // Update sort keys for state-dependent sort-key
+        if (this.sortKeyStateDependent && this.layers.length > 0) {
+            const styleLayer = this.layers[0];
+            if (styleLayer.type === 'circle') {
+                const circleStyle = (styleLayer as CircleStyleLayer);
+                const circleSortKey = circleStyle.layout.get('circle-sort-key');
+                const sourceLayerId = circleStyle.sourceLayer || '';
+                const sourceLayerStates = states[sourceLayerId] || {};
+
+                // Build a map from featureId to feature for efficient lookup
+                const featureMap = new Map<any, any>();
+                for (let i = 0; i < vtLayer.length; i++) {
+                    const feature = vtLayer.feature(i);
+                    if (feature && feature.id !== undefined) {
+                        featureMap.set(feature.id, feature);
+                    }
+                }
+
+                // Re-evaluate sort keys for segments with featureId
+                for (const segment of this.segments.segments) {
+                    if (segment.featureId !== undefined) {
+                        const featureState = sourceLayerStates[segment.featureId] || {};
+                        const feature = featureMap.get(segment.featureId);
+                        if (feature) {
+                            const evaluationFeature = toEvaluationFeature(feature, false);
+                            const sortKey = circleSortKey.evaluate(
+                                evaluationFeature,
+                                featureState,
+                                undefined
+                            );
+                            segment.sortKey = sortKey;
+                        }
+                    }
+                }
+
+                // Sort segments by sortKey
+                this.segments.segments.sort((a, b) => {
+                    const aKey = a.sortKey ?? 0;
+                    const bKey = b.sortKey ?? 0;
+                    return aKey - bKey;
+                });
+            }
+        }
     }
 
     isEmpty() {
@@ -209,7 +264,14 @@ export class CircleBucket<Layer extends CircleStyleLayer | HeatmapStyleLayer> im
                     continue;
                 }
 
-                const segment = this.segments.prepareSegment(verticesPerAxis * verticesPerAxis, this.layoutVertexArray, this.indexArray, feature.sortKey);
+                const segment = this.segments.prepareSegment(
+                    verticesPerAxis * verticesPerAxis,
+                    this.layoutVertexArray,
+                    this.indexArray,
+                    feature.sortKey,
+                    this.sortKeyStateDependent ? feature.id : undefined,
+                    this.sortKeyStateDependent ? feature.sourceLayerIndex : undefined
+                );
                 const index = segment.vertexLength;
 
                 for (let y = 0; y < verticesPerAxis; y++) {
