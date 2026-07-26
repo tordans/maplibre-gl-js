@@ -482,11 +482,11 @@ export class Tile {
             const sourceLayer = vtLayers[sourceLayerId];
             const sourceLayerStates = states[sourceLayerId] || {};
 
-            // Update bucket if there are states, or if bucket has state-dependent sort-key (needs initial evaluation)
+            // Update bucket if there are states, or if bucket has state-dependent layout (needs initial evaluation)
             const needsUpdate = hasStates && sourceLayerStates && Object.keys(sourceLayerStates).length > 0;
-            const needsSortKeyUpdate = (bucket as any).sortKeyStateDependent && sourceLayer;
+            const needsLayoutUpdate = bucket.hasStateDependentLayout && sourceLayer;
 
-            if (needsUpdate || needsSortKeyUpdate) {
+            if (needsUpdate || needsLayoutUpdate) {
                 bucket.update(sourceLayerStates, sourceLayer, this.imageAtlas && this.imageAtlas.patternPositions || {}, this.dashPositions || {});
             }
 

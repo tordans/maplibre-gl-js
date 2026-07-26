@@ -9,6 +9,8 @@ import {toEvaluationFeature} from '../evaluation_feature';
 import {EXTENT} from '../extent';
 import {register} from '../../util/web_worker_transfer';
 import {EvaluationParameters} from '../../style/evaluation_parameters';
+import {LAYOUT_PROPERTIES_ALLOWING_FEATURE_STATE} from '../../style/layout_properties_feature_state';
+import {updateSegmentSortKeys} from './update_segment_layout';
 
 import type {CanonicalTileID} from '../../tile/tile_id';
 import type {
@@ -65,7 +67,7 @@ export class CircleBucket<Layer extends CircleStyleLayer | HeatmapStyleLayer> im
     programConfigurations: ProgramConfigurationSet<Layer>;
     segments: SegmentVector;
     uploaded: boolean;
-    sortKeyStateDependent: boolean;
+    hasStateDependentLayout: boolean;
 
     constructor(options: BucketParameters<Layer>) {
         this.zoom = options.zoom;
@@ -96,14 +98,23 @@ export class CircleBucket<Layer extends CircleStyleLayer | HeatmapStyleLayer> im
             const circleStyle = (styleLayer as CircleStyleLayer);
             circleSortKey = circleStyle.layout.get('circle-sort-key');
             sortFeaturesByKey = !circleSortKey.isConstant();
-            this.sortKeyStateDependent = sortFeaturesByKey && 
-                (circleSortKey.value.kind === 'source' || circleSortKey.value.kind === 'composite') &&
-                circleSortKey.value.isStateDependent;
+            
+            // Check if any layout property allowing feature-state is state-dependent
+            this.hasStateDependentLayout = false;
+            for (const propertyName of LAYOUT_PROPERTIES_ALLOWING_FEATURE_STATE) {
+                const layoutValue = circleStyle.layout.get(propertyName);
+                if (layoutValue && !layoutValue.isConstant() &&
+                    (layoutValue.value.kind === 'source' || layoutValue.value.kind === 'composite') &&
+                    layoutValue.value.isStateDependent) {
+                    this.hasStateDependentLayout = true;
+                    break;
+                }
+            }
 
             // Circles that are "printed" onto the map surface should be tessellated to follow the globe's curvature.
             subdivide = subdivide || circleStyle.paint.get('circle-pitch-alignment') === 'map';
         } else {
-            this.sortKeyStateDependent = false;
+            this.hasStateDependentLayout = false;
         }
 
         const granularity = subdivide ? options.subdivisionGranularity.circle : 1;
@@ -114,9 +125,9 @@ export class CircleBucket<Layer extends CircleStyleLayer | HeatmapStyleLayer> im
 
             if (!this.layers[0]._featureFilter.filter(new EvaluationParameters(this.zoom), evaluationFeature, canonical)) continue;
 
-            // For state-dependent sort-key, we can't evaluate on worker (no feature state available)
+            // For state-dependent layout (e.g. sort-key), we can't evaluate on worker (no feature state available)
             // Use placeholder sortKey and store featureId for main-thread re-evaluation
-            const sortKey = sortFeaturesByKey && !this.sortKeyStateDependent ?
+            const sortKey = sortFeaturesByKey && !this.hasStateDependentLayout ?
                 circleSortKey.evaluate(evaluationFeature, {}, canonical) :
                 (sortFeaturesByKey ? 0 : undefined);
 
@@ -149,7 +160,7 @@ export class CircleBucket<Layer extends CircleStyleLayer | HeatmapStyleLayer> im
     }
 
     update(states: FeatureStates, vtLayer: VectorTileLayerLike, imagePositions: {[_: string]: ImagePosition}) {
-        if (!this.stateDependentLayers.length && !this.sortKeyStateDependent) return;
+        if (!this.stateDependentLayers.length && !this.hasStateDependentLayout) return;
         
         if (this.stateDependentLayers.length) {
             this.programConfigurations.updatePaintArrays(states, vtLayer, this.stateDependentLayers, {
@@ -157,47 +168,17 @@ export class CircleBucket<Layer extends CircleStyleLayer | HeatmapStyleLayer> im
             });
         }
 
-        // Update sort keys for state-dependent sort-key
-        if (this.sortKeyStateDependent && this.layers.length > 0) {
+        // Update layout properties (e.g. sort-key) for state-dependent layout
+        if (this.hasStateDependentLayout && this.layers.length > 0) {
             const styleLayer = this.layers[0];
             if (styleLayer.type === 'circle') {
-                const circleStyle = (styleLayer as CircleStyleLayer);
-                const circleSortKey = circleStyle.layout.get('circle-sort-key');
-                const sourceLayerId = circleStyle.sourceLayer || '';
-                const sourceLayerStates = states[sourceLayerId] || {};
-
-                // Build a map from featureId to feature for efficient lookup
-                const featureMap = new Map<any, any>();
-                for (let i = 0; i < vtLayer.length; i++) {
-                    const feature = vtLayer.feature(i);
-                    if (feature && feature.id !== undefined) {
-                        featureMap.set(feature.id, feature);
-                    }
-                }
-
-                // Re-evaluate sort keys for segments with featureId
-                for (const segment of this.segments.segments) {
-                    if (segment.featureId !== undefined) {
-                        const featureState = sourceLayerStates[segment.featureId] || {};
-                        const feature = featureMap.get(segment.featureId);
-                        if (feature) {
-                            const evaluationFeature = toEvaluationFeature(feature, false);
-                            const sortKey = circleSortKey.evaluate(
-                                evaluationFeature,
-                                featureState,
-                                undefined
-                            );
-                            segment.sortKey = sortKey;
-                        }
-                    }
-                }
-
-                // Sort segments by sortKey
-                this.segments.segments.sort((a, b) => {
-                    const aKey = a.sortKey ?? 0;
-                    const bKey = b.sortKey ?? 0;
-                    return aKey - bKey;
-                });
+                updateSegmentSortKeys(
+                    this.segments,
+                    styleLayer as CircleStyleLayer,
+                    'circle-sort-key',
+                    states,
+                    vtLayer
+                );
             }
         }
     }
@@ -269,8 +250,8 @@ export class CircleBucket<Layer extends CircleStyleLayer | HeatmapStyleLayer> im
                     this.layoutVertexArray,
                     this.indexArray,
                     feature.sortKey,
-                    this.sortKeyStateDependent ? feature.id : undefined,
-                    this.sortKeyStateDependent ? feature.sourceLayerIndex : undefined
+                    this.hasStateDependentLayout ? feature.id : undefined,
+                    this.hasStateDependentLayout ? feature.sourceLayerIndex : undefined
                 );
                 const index = segment.vertexLength;
 

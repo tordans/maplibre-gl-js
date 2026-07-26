@@ -11,6 +11,8 @@ import {hasPattern, addPatternDependencies} from './pattern_bucket_features';
 import {loadGeometry} from '../load_geometry';
 import {toEvaluationFeature} from '../evaluation_feature';
 import {EvaluationParameters} from '../../style/evaluation_parameters';
+import {LAYOUT_PROPERTIES_ALLOWING_FEATURE_STATE} from '../../style/layout_properties_feature_state';
+import {updateSegmentSortKeys} from './update_segment_layout';
 
 import type {CanonicalTileID} from '../../tile/tile_id';
 import type {
@@ -56,7 +58,7 @@ export class FillBucket implements Bucket {
     segments: SegmentVector;
     segments2: SegmentVector;
     uploaded: boolean;
-    sortKeyStateDependent: boolean;
+    hasStateDependentLayout: boolean;
 
     constructor(options: BucketParameters<FillStyleLayer>) {
         this.zoom = options.zoom;
@@ -80,9 +82,19 @@ export class FillBucket implements Bucket {
         this.hasDependencies = hasPattern('fill', this.layers, options);
         const fillSortKey = this.layers[0].layout.get('fill-sort-key');
         const sortFeaturesByKey = !fillSortKey.isConstant();
-        this.sortKeyStateDependent = sortFeaturesByKey && 
-            (fillSortKey.value.kind === 'source' || fillSortKey.value.kind === 'composite') &&
-            fillSortKey.value.isStateDependent;
+        
+        // Check if any layout property allowing feature-state is state-dependent
+        this.hasStateDependentLayout = false;
+        for (const propertyName of LAYOUT_PROPERTIES_ALLOWING_FEATURE_STATE) {
+            const layoutValue = this.layers[0].layout.get(propertyName);
+            if (layoutValue && !layoutValue.isConstant() &&
+                (layoutValue.value.kind === 'source' || layoutValue.value.kind === 'composite') &&
+                layoutValue.value.isStateDependent) {
+                this.hasStateDependentLayout = true;
+                break;
+            }
+        }
+        
         const bucketFeatures: BucketFeature[] = [];
 
         for (const {feature, id, index, sourceLayerIndex} of features) {
@@ -91,9 +103,9 @@ export class FillBucket implements Bucket {
 
             if (!this.layers[0]._featureFilter.filter(new EvaluationParameters(this.zoom), evaluationFeature, canonical)) continue;
 
-            // For state-dependent sort-key, we can't evaluate on worker (no feature state available)
+            // For state-dependent layout (e.g. sort-key), we can't evaluate on worker (no feature state available)
             // Use placeholder sortKey and store featureId for main-thread re-evaluation
-            const sortKey = sortFeaturesByKey && !this.sortKeyStateDependent ?
+            const sortKey = sortFeaturesByKey && !this.hasStateDependentLayout ?
                 fillSortKey.evaluate(evaluationFeature, {}, canonical, options.availableImages) :
                 (sortFeaturesByKey ? 0 : undefined);
 
@@ -135,7 +147,7 @@ export class FillBucket implements Bucket {
     update(states: FeatureStates, vtLayer: VectorTileLayerLike, imagePositions: {
         [_: string]: ImagePosition;
     }) {
-        if (!this.stateDependentLayers.length && !this.sortKeyStateDependent) return;
+        if (!this.stateDependentLayers.length && !this.hasStateDependentLayout) return;
         
         if (this.stateDependentLayers.length) {
             this.programConfigurations.updatePaintArrays(states, vtLayer, this.stateDependentLayers, {
@@ -143,66 +155,15 @@ export class FillBucket implements Bucket {
             });
         }
 
-        // Update sort keys for state-dependent sort-key
-        if (this.sortKeyStateDependent && this.layers.length > 0) {
-            const fillSortKey = this.layers[0].layout.get('fill-sort-key');
-            const sourceLayerId = this.layers[0].sourceLayer || '';
-            const sourceLayerStates = states[sourceLayerId] || {};
-
-            // Build a map from featureId to feature for efficient lookup
-            const featureMap = new Map<any, any>();
-            for (let i = 0; i < vtLayer.length; i++) {
-                const feature = vtLayer.feature(i);
-                if (feature && feature.id !== undefined) {
-                    featureMap.set(feature.id, feature);
-                }
-            }
-
-            // Re-evaluate sort keys for segments with featureId
-            for (const segment of this.segments.segments) {
-                if (segment.featureId !== undefined) {
-                    const featureState = sourceLayerStates[segment.featureId] || {};
-                    const feature = featureMap.get(segment.featureId);
-                    if (feature) {
-                        const evaluationFeature = toEvaluationFeature(feature, false);
-                        const sortKey = fillSortKey.evaluate(
-                            evaluationFeature,
-                            featureState,
-                            undefined
-                        );
-                        segment.sortKey = sortKey;
-                    }
-                }
-            }
-
-            // Also update segments2 (outline segments)
-            for (const segment of this.segments2.segments) {
-                if (segment.featureId !== undefined) {
-                    const featureState = sourceLayerStates[segment.featureId] || {};
-                    const feature = featureMap.get(segment.featureId);
-                    if (feature) {
-                        const evaluationFeature = toEvaluationFeature(feature, false);
-                        const sortKey = fillSortKey.evaluate(
-                            evaluationFeature,
-                            featureState,
-                            undefined
-                        );
-                        segment.sortKey = sortKey;
-                    }
-                }
-            }
-
-            // Sort segments by sortKey
-            this.segments.segments.sort((a, b) => {
-                const aKey = a.sortKey ?? 0;
-                const bKey = b.sortKey ?? 0;
-                return aKey - bKey;
-            });
-            this.segments2.segments.sort((a, b) => {
-                const aKey = a.sortKey ?? 0;
-                const bKey = b.sortKey ?? 0;
-                return aKey - bKey;
-            });
+        // Update layout properties (e.g. sort-key) for state-dependent layout
+        if (this.hasStateDependentLayout && this.layers.length > 0) {
+            updateSegmentSortKeys(
+                [this.segments, this.segments2],
+                this.layers[0],
+                'fill-sort-key',
+                states,
+                vtLayer
+            );
         }
     }
 
@@ -262,8 +223,8 @@ export class FillBucket implements Bucket {
                 this.indexArray2,
                 subdivided.indicesLineList,
                 feature.sortKey,
-                this.sortKeyStateDependent ? feature.id : undefined,
-                this.sortKeyStateDependent ? feature.sourceLayerIndex : undefined
+                this.hasStateDependentLayout ? feature.id : undefined,
+                this.hasStateDependentLayout ? feature.sourceLayerIndex : undefined
             );
         }
         this.programConfigurations.populatePaintArrays(this.layoutVertexArray.length, feature, index, {imagePositions, canonical});

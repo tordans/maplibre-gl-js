@@ -16,7 +16,7 @@ import type {FillBucket} from '../data/bucket/fill_bucket';
 import type {OverscaledTileID} from '../tile/tile_id';
 import {updatePatternPositionsInProgram} from './update_pattern_positions_in_program';
 import {translatePosition} from '../util/util';
-import {SegmentVector} from '../data/segment';
+import {getSegmentsSortedBySortKey} from './segment_sorting';
 
 export function drawFill(painter: Painter, tileManager: TileManager, layer: FillStyleLayer, coords: Array<OverscaledTileID>, renderOptions: RenderOptions) {
     const color = layer.paint.get('fill-color');
@@ -134,16 +134,7 @@ function drawFillTiles(
         const stencil = painter.stencilModeForClipping(coord);
 
         // Sort segments by sortKey if sort-key is data-driven
-        let segmentsToDraw = segments;
-        if (sortFeaturesByKey) {
-            const sortedSegments = segments.get().slice();
-            sortedSegments.sort((a, b) => {
-                const aKey = a.sortKey ?? 0;
-                const bKey = b.sortKey ?? 0;
-                return aKey - bKey;
-            });
-            segmentsToDraw = new SegmentVector(sortedSegments);
-        }
+        const segmentsToDraw = getSegmentsSortedBySortKey(segments, sortFeaturesByKey);
 
         program.draw(painter.context, drawMode, depthMode,
             stencil, colorMode, CullFaceMode.backCCW, uniformValues, terrainData, projectionData,

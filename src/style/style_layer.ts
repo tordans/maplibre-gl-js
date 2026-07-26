@@ -1,6 +1,7 @@
 import {filterObject} from '../util/util';
 
 import {createVisibilityExpression, featureFilter, latest as styleSpec, supportsPropertyExpression} from '@maplibre/maplibre-gl-style-spec';
+import {LAYOUT_PROPERTIES_ALLOWING_FEATURE_STATE} from './layout_properties_feature_state';
 import {
     validateStyle,
     validateLayoutProperty,
@@ -405,20 +406,16 @@ export abstract class StyleLayer extends Evented {
             }
         }
 
-        // Check layout sort-key properties for state-dependent expressions
-        const sortKeyPropertyNames = {
-            'circle': 'circle-sort-key',
-            'fill': 'fill-sort-key',
-            'line': 'line-sort-key'
-        };
-        const sortKeyPropertyName = sortKeyPropertyNames[this.type as keyof typeof sortKeyPropertyNames];
-        if (sortKeyPropertyName && (this as any).layout) {
-            const sortKeyValue = (this as any).layout.get(sortKeyPropertyName);
-            if (sortKeyValue instanceof PossiblyEvaluatedPropertyValue && 
-                supportsPropertyExpression(sortKeyValue.property.specification)) {
-                if ((sortKeyValue.value.kind === 'source' || sortKeyValue.value.kind === 'composite') &&
-                    sortKeyValue.value.isStateDependent) {
-                    return true;
+        // Check layout properties that allow feature-state for state-dependent expressions
+        if ((this as any).layout) {
+            for (const propertyName of LAYOUT_PROPERTIES_ALLOWING_FEATURE_STATE) {
+                const layoutValue = (this as any).layout.get(propertyName);
+                if (layoutValue instanceof PossiblyEvaluatedPropertyValue && 
+                    supportsPropertyExpression(layoutValue.property.specification)) {
+                    if ((layoutValue.value.kind === 'source' || layoutValue.value.kind === 'composite') &&
+                        layoutValue.value.isStateDependent) {
+                        return true;
+                    }
                 }
             }
         }

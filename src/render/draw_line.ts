@@ -21,7 +21,7 @@ import {clamp, nextPowerOfTwo} from '../util/util';
 import {renderColorRamp} from '../util/color_ramp';
 import {EXTENT} from '../data/extent';
 import type {RGBAImage} from '../util/image';
-import {SegmentVector} from '../data/segment';
+import {getSegmentsSortedBySortKey} from './segment_sorting';
 
 type GradientTexture = {
     texture?: Texture;
@@ -232,16 +232,7 @@ export function drawLine(painter: Painter, tileManager: TileManager, layer: Line
         const stencil = painter.stencilModeForClipping(coord);
 
         // Sort segments by sortKey if sort-key is data-driven
-        let segmentsToDraw = bucket.segments;
-        if (sortFeaturesByKey) {
-            const sortedSegments = bucket.segments.get().slice();
-            sortedSegments.sort((a, b) => {
-                const aKey = a.sortKey ?? 0;
-                const bKey = b.sortKey ?? 0;
-                return aKey - bKey;
-            });
-            segmentsToDraw = new SegmentVector(sortedSegments);
-        }
+        const segmentsToDraw = getSegmentsSortedBySortKey(bucket.segments, sortFeaturesByKey);
 
         program.draw(context, gl.TRIANGLES, depthMode,
             stencil, colorMode, CullFaceMode.disabled, uniformValues, terrainData, projectionData,

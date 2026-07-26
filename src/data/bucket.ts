@@ -86,6 +86,11 @@ export interface Bucket {
     readonly layers: Array<any>;
     readonly stateDependentLayers: Array<any>;
     readonly stateDependentLayerIds: Array<string>;
+    /**
+     * Whether this bucket has layout properties that depend on feature-state.
+     * These properties require main-thread re-evaluation when feature state changes.
+     */
+    hasStateDependentLayout?: boolean;
     populate(features: Array<IndexedFeature>, options: PopulateParameters, canonical: CanonicalTileID): void;
     update(states: FeatureStates, vtLayer: VectorTileLayerLike, imagePositions: {[_: string]: ImagePosition}, dashPositions: Record<string, DashEntry>): void;
     isEmpty(): boolean;

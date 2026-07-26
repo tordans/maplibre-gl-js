@@ -98,7 +98,7 @@ export function drawCircles(painter: Painter, tileManager: TileManager, layer: C
             for (const segment of oldSegments) {
                 segmentsRenderStates.push({
                     segments: new SegmentVector([segment]),
-                    sortKey: (segment.sortKey as any as number),
+                    sortKey: segment.sortKey ?? 0,
                     state
                 });
             }
