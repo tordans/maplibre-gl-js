@@ -9,7 +9,6 @@ import {toEvaluationFeature} from '../evaluation_feature';
 import {EXTENT} from '../extent';
 import {register} from '../../util/web_worker_transfer';
 import {EvaluationParameters} from '../../style/evaluation_parameters';
-import {LAYOUT_PROPERTIES_ALLOWING_FEATURE_STATE} from '../../style/layout_properties_feature_state';
 import {updateSegmentSortKeys} from './update_segment_layout';
 
 import type {CanonicalTileID} from '../../tile/tile_id';
@@ -99,16 +98,12 @@ export class CircleBucket<Layer extends CircleStyleLayer | HeatmapStyleLayer> im
             circleSortKey = circleStyle.layout.get('circle-sort-key');
             sortFeaturesByKey = !circleSortKey.isConstant();
             
-            // Check if any layout property allowing feature-state is state-dependent
+            // circle-sort-key may be feature-state dependent (main-thread re-eval)
             this.hasStateDependentLayout = false;
-            for (const propertyName of LAYOUT_PROPERTIES_ALLOWING_FEATURE_STATE) {
-                const layoutValue = circleStyle.layout.get(propertyName);
-                if (layoutValue && !layoutValue.isConstant() &&
-                    (layoutValue.value.kind === 'source' || layoutValue.value.kind === 'composite') &&
-                    layoutValue.value.isStateDependent) {
-                    this.hasStateDependentLayout = true;
-                    break;
-                }
+            if (circleSortKey && !circleSortKey.isConstant() &&
+                (circleSortKey.value.kind === 'source' || circleSortKey.value.kind === 'composite') &&
+                circleSortKey.value.isStateDependent) {
+                this.hasStateDependentLayout = true;
             }
 
             // Circles that are "printed" onto the map surface should be tessellated to follow the globe's curvature.

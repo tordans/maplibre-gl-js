@@ -12,7 +12,6 @@ import {hasPattern, addPatternDependencies} from './pattern_bucket_features';
 import {loadGeometry} from '../load_geometry';
 import {toEvaluationFeature} from '../evaluation_feature';
 import {EvaluationParameters} from '../../style/evaluation_parameters';
-import {LAYOUT_PROPERTIES_ALLOWING_FEATURE_STATE} from '../../style/layout_properties_feature_state';
 import {updateSegmentSortKeys} from './update_segment_layout';
 
 import type {CanonicalTileID} from '../../tile/tile_id';
@@ -153,16 +152,12 @@ export class LineBucket implements Bucket {
         const lineSortKey = this.layers[0].layout.get('line-sort-key');
         const sortFeaturesByKey = !lineSortKey.isConstant();
         
-        // Check if any layout property allowing feature-state is state-dependent
+        // line-sort-key may be feature-state dependent (main-thread re-eval)
         this.hasStateDependentLayout = false;
-        for (const propertyName of LAYOUT_PROPERTIES_ALLOWING_FEATURE_STATE) {
-            const layoutValue = this.layers[0].layout.get(propertyName);
-            if (layoutValue && !layoutValue.isConstant() &&
-                (layoutValue.value.kind === 'source' || layoutValue.value.kind === 'composite') &&
-                layoutValue.value.isStateDependent) {
-                this.hasStateDependentLayout = true;
-                break;
-            }
+        if (lineSortKey && !lineSortKey.isConstant() &&
+            (lineSortKey.value.kind === 'source' || lineSortKey.value.kind === 'composite') &&
+            lineSortKey.value.isStateDependent) {
+            this.hasStateDependentLayout = true;
         }
         
         const bucketFeatures: BucketFeature[] = [];

@@ -26,7 +26,8 @@ export function updateSegmentSortKeys(
     states: FeatureStates,
     vtLayer: VectorTileLayerLike
 ): void {
-    const sortKeyExpression = layer.layout.get(layoutSortKeyProperty);
+    // layout.get is typed per layer; property name is validated by callers.
+    const sortKeyExpression = (layer.layout as {get: (name: typeof layoutSortKeyProperty) => any}).get(layoutSortKeyProperty);
     if (!sortKeyExpression) return;
 
     const sourceLayerId = layer.sourceLayer || '';
