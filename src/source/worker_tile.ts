@@ -39,6 +39,10 @@ export class WorkerTile {
     abort: AbortController;
     vectorTile: VectorTileLike;
     /**
+     * The serialized form of `vectorTile`, for a tile whose worker source sends it with every parse result.
+     */
+    rawTileData?: ArrayBufferLike;
+    /**
      * The etag of the response this tile was loaded from. A reload has no new response, so it is returned again
      * to keep the main thread's tile etag intact for the next expiry refresh.
      */

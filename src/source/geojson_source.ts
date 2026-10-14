@@ -183,6 +183,8 @@ export class GeoJSONSource extends Evented<SourceEventType> implements Source {
     map: Map;
     actorPromise: Promise<Actor>;
     _workerUpdates: UpdateQueue<GeoJSONWorkerUpdate, GeoJSONWorkerSourceLoadDataResult>;
+    /** The request each tile sent to the worker last, the only one whose answer the tile takes. */
+    _latestTileRequests: WeakMap<Tile, AbortController> = new WeakMap();
     _collectResourceTiming: boolean;
     _removed: boolean;
 
@@ -633,6 +635,13 @@ export class GeoJSONSource extends Evented<SourceEventType> implements Source {
         return this._workerUpdates.isIdle();
     }
 
+    /**
+     * Asks the worker for the tile's data and installs the answer in the tile.
+     *
+     * A tile takes the answer to its newest request only. Requests for one tile overlap whenever it is reloaded
+     * while it is still loading, as a data update followed by a style change does, and the worker answers them
+     * in the order their parsing finishes, which waits on the glyphs, images and dashes each one needs.
+     */
     async loadTile(tile: Tile): Promise<void> {
         const message = !tile.actor ?  MessageType.loadTile :  MessageType.reloadTile;
         tile.actor = await this.actorPromise;
@@ -650,9 +659,11 @@ export class GeoJSONSource extends Evented<SourceEventType> implements Source {
             subdivisionGranularity: this.map.style.projection.subdivisionGranularity
         };
 
-        tile.abortController = new AbortController();
+        const abortController = tile.abortController = new AbortController();
+        this._latestTileRequests.set(tile, abortController);
         try {
-            const data = await (await this.actorPromise).sendAsync({type: message, data: params}, tile.abortController);
+            const data = await (await this.actorPromise).sendAsync({type: message, data: params}, abortController);
+            if (this._latestTileRequests.get(tile) !== abortController) return;
             delete tile.abortController;
             tile.unloadVectorData();
 
@@ -660,6 +671,7 @@ export class GeoJSONSource extends Evented<SourceEventType> implements Source {
                 tile.loadVectorData(data, this.map.style, message ===  MessageType.reloadTile);
             }
         } catch (err) {
+            if (this._latestTileRequests.get(tile) !== abortController) return;
             delete tile.abortController;
             if (tile.aborted || isAbortError(err)) {
                 return;
